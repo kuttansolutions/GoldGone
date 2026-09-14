@@ -259,6 +259,11 @@ body.mode-android #statue-wrapper{ --statue-top:36%; --statue-left:50%; --statue
 
 body.mode-android .corner-text{ display:none; }
 
+body.mode-android .thief{
+  width: calc(128px * var(--ui-scale, 1) * 1.4);
+  height: calc(128px * var(--ui-scale, 1) * 1.4);
+}
+
 /* ---------- Overlays ---------- */
 .overlay{
   position:absolute; inset:0;
