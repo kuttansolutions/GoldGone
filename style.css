@@ -109,7 +109,7 @@ body.mode-android #game-container{ background-image: url('assets/ground_android.
 }
 
 body.mode-pc      #statue-wrapper{ --statue-top:42%; --statue-left:50%; --statue-width:20%; }
-body.mode-android #statue-wrapper{ --statue-top:36%; --statue-left:50%; --statue-width:34%; }
+body.mode-android #statue-wrapper{ --statue-top:40%; --statue-left:50%; --statue-width:34%; }
 
 .statue-glow{
   position:absolute;
