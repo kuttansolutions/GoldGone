@@ -34,12 +34,13 @@ html, body{
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  background-color: #1a130c; /* fallback dark tone until ground images are added */
 
   width: 96vw;
   aspect-ratio: 16/9;
   max-height: 96vh;
 
-  --ui-scale: 1;
+  --ui-scale: 1; /* used for HUD text scaling ONLY, not thief size */
 }
 
 body.mode-pc      #game-container{ background-image: url('assets/ground_pc.png'); }
@@ -135,14 +136,25 @@ body.mode-android #statue-wrapper{ --statue-top:36%; --statue-left:50%; --statue
 /* ---------- Kammi's (thieves) ---------- */
 #thief-layer{ position:absolute; inset:0; z-index:10; }
 
-/* Doubled base size: 128px instead of 64px */
+/* Independent, platform-specific sizing — edit these two values
+   to resize Kammi's. Nothing else needs to change. */
+:root{
+  --thief-size-pc: 128px;
+  --thief-size-android: 90px;
+}
+
 .thief{
   position:absolute;
-  width: calc(128px * var(--ui-scale, 1));
-  height: calc(128px * var(--ui-scale, 1));
+  width: var(--thief-size-pc);
+  height: var(--thief-size-pc);
   cursor:pointer;
   z-index:10;
   touch-action:manipulation;
+}
+
+body.mode-android .thief{
+  width: var(--thief-size-android);
+  height: var(--thief-size-android);
 }
 
 .thief-shadow{
@@ -258,11 +270,6 @@ body.mode-android #statue-wrapper{ --statue-top:36%; --statue-left:50%; --statue
 #bottom-text-right{ right: clamp(10px,1.6vw,20px); text-align:right; }
 
 body.mode-android .corner-text{ display:none; }
-
-body.mode-android .thief{
-  width: calc(128px * var(--ui-scale, 1) * 0.7);
-  height: calc(128px * var(--ui-scale, 1) * 0.7);
-}
 
 /* ---------- Overlays ---------- */
 .overlay{
