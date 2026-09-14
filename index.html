@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.toggle('mode-android', mode === 'android');
 
     const aspect   = mode === 'pc' ? (1920/1080) : (1080/1920);
-    const baseline = mode === 'pc' ? 1920 : 1080;
+    const baseline = mode === 'pc' ? 1920 : 480;
 
     const vw = window.innerWidth;
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
