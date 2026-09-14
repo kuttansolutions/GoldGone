@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Protect The Divine</title>
+<title>Save God</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -30,33 +30,36 @@
       <img src="assets/statue.png" alt="Sacred Statue" id="statue-img" draggable="false">
     </div>
 
-    <!-- Thieves get injected here -->
+    <!-- Kammi's get injected here -->
     <div id="thief-layer"></div>
 
     <!-- Feedback overlays -->
     <div id="wave-banner"></div>
     <div id="damage-flash"></div>
 
-    <div class="corner-text" id="bottom-text-left">PROTECT<br>THE DIVINE</div>
+    <div class="corner-text" id="bottom-text-left">SAVE<br>GOD</div>
     <div class="corner-text" id="bottom-text-right">FAITH<br>ALWAYS WINS</div>
 
     <!-- Start screen -->
     <div class="overlay" id="start-screen">
-      <h1>🛕 Protect The Divine</h1>
-      <p>Thieves are coming for the sacred statue! Tap them before they reach it. Let too many through and it's game over.</p>
+      <h1>🛕 Save God</h1>
+      <p class="tagline">Save God from Kammi's</p>
+      <p>Kammi's are coming to steal the sacred statue! Tap them before they reach it. Let too many through and it's game over.</p>
       <button id="start-btn">Start Game</button>
     </div>
 
     <!-- Game over screen -->
     <div class="overlay hidden" id="gameover-screen">
-      <h1>Game Over</h1>
-      <p>The statue was overrun by thieves...</p>
+      <h1 class="gameover-title">The Comrades<br>Got The Gold</h1>
       <p style="font-size:clamp(16px,2.2vw,22px); color:#ffd76a;">Final Score: <span id="final-score">0</span></p>
       <button id="restart-btn">Play Again</button>
     </div>
 
   </div>
 </div>
+
+<!-- Sound effect: plays when a Kammi reaches the statue -->
+<audio id="hit-sound" src="assets/sounds/ayyappa.mp3" preload="auto"></audio>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -74,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const damageFlash     = document.getElementById('damage-flash');
   const startBtn        = document.getElementById('start-btn');
   const restartBtn      = document.getElementById('restart-btn');
+  const hitSound        = document.getElementById('hit-sound');
 
   const THIEF_SPRITES = {
     up:    'assets/thief/run_up.png',
@@ -82,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     right: 'assets/thief/run_right.png'
   };
 
+  const THIEF_SIZE = 128; // px, base size before --ui-scale is applied
   const maxLives = 3;
 
   let score, wave, lives, caughtThisWave, waveTarget;
@@ -107,18 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.toggle('mode-android', mode === 'android');
 
     const aspect   = mode === 'pc' ? (1920/1080) : (1080/1920);
-    const baseline = mode === 'pc' ? 1920 : 1080; // reference width for UI scaling
+    const baseline = mode === 'pc' ? 1920 : 1080;
 
     const vw = window.innerWidth;
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
 
     let width, height;
     if (vw / vh > aspect) {
-      // viewport is relatively wider than the image -> height is the limit
       height = vh;
       width  = height * aspect;
     } else {
-      // viewport is relatively taller than the image -> width is the limit
       width  = vw;
       height = width / aspect;
     }
@@ -210,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const rect = thiefLayer.getBoundingClientRect();
     const w = rect.width, h = rect.height;
-    const pad = 40;
+    const pad = 60;
     let x, y;
     const edge = Math.floor(Math.random()*4);
     if(edge === 0){ x = w*0.1 + Math.random()*w*0.8; y = -pad; }
@@ -226,6 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const dy = ty - y;
     const direction = getDirectionFromVector(dx, dy);
 
+    const half = THIEF_SIZE / 2;
+
     const thief = document.createElement('div');
     thief.className = 'thief';
     thief.dataset.direction = direction;
@@ -237,13 +242,13 @@ document.addEventListener('DOMContentLoaded', () => {
     img.className = 'thief-sprite';
     img.src = THIEF_SPRITES[direction];
     img.draggable = false;
-    img.alt = 'thief';
+    img.alt = 'kammi';
 
     thief.appendChild(shadow);
     thief.appendChild(img);
 
-    thief.style.left = (x - 32) + 'px';
-    thief.style.top  = (y - 32) + 'px';
+    thief.style.left = (x - half) + 'px';
+    thief.style.top  = (y - half) + 'px';
     thiefLayer.appendChild(thief);
     activeThieves.add(thief);
 
@@ -252,8 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        thief.style.left = (tx - 32) + 'px';
-        thief.style.top  = (ty - 32) + 'px';
+        thief.style.left = (tx - half) + 'px';
+        thief.style.top  = (ty - half) + 'px';
       });
     });
 
@@ -286,8 +291,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     thief.classList.add('caught');
 
-    const px = parseFloat(curLeft) + 32;
-    const py = parseFloat(curTop) + 32;
+    const half = THIEF_SIZE / 2;
+    const px = parseFloat(curLeft) + half;
+    const py = parseFloat(curTop) + half;
     spawnScorePopup(px, py);
 
     score += 10;
@@ -332,10 +338,18 @@ document.addEventListener('DOMContentLoaded', () => {
     waveBanner.classList.add('show');
   }
 
+  function playHitSound(){
+    try{
+      hitSound.currentTime = 0;
+      hitSound.play().catch(() => {});
+    }catch(err){ /* ignore playback errors (autoplay restrictions etc.) */ }
+  }
+
   function loseLife(){
     lives--;
     updateHUD();
     flashDamage();
+    playHitSound();
     if(lives <= 0){
       triggerGameOver();
     }
@@ -357,7 +371,15 @@ document.addEventListener('DOMContentLoaded', () => {
     gameoverScreen.classList.remove('hidden');
   }
 
-  startBtn.addEventListener('click', resetGame);
+  startBtn.addEventListener('click', () => {
+    // Unlock audio playback on the very first user gesture (needed for mobile browsers)
+    hitSound.play().then(() => {
+      hitSound.pause();
+      hitSound.currentTime = 0;
+    }).catch(() => {});
+    resetGame();
+  });
+
   restartBtn.addEventListener('click', resetGame);
 
   score = 0; wave = 1; lives = maxLives;
