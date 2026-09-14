@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Protect The Divine</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="game-wrapper">
+  <div id="game-container">
+
+    <!-- HUD -->
+    <div id="hud-top">
+      <div class="hud-box" id="score-box">
+        <div class="hud-label">SCORE</div>
+        <div id="score-value">0</div>
+      </div>
+      <div class="hud-box" id="wave-box">
+        <div class="hud-label">WAVE <span id="wave-value">1</span></div>
+        <div id="hearts-container"></div>
+      </div>
+    </div>
+
+    <!-- Statue (image-based) -->
+    <div id="statue-wrapper">
+      <div class="statue-glow"></div>
+      <img src="assets/statue.png" alt="Sacred Statue" id="statue-img" draggable="false">
+    </div>
+
+    <!-- Thieves get injected here -->
+    <div id="thief-layer"></div>
+
+    <!-- Feedback overlays -->
+    <div id="wave-banner"></div>
+    <div id="damage-flash"></div>
+
+    <div class="corner-text" id="bottom-text-left">PROTECT<br>THE DIVINE</div>
+    <div class="corner-text" id="bottom-text-right">FAITH<br>ALWAYS WINS</div>
+
+    <!-- Start screen -->
+    <div class="overlay" id="start-screen">
+      <h1>🛕 Protect The Divine</h1>
+      <p>Thieves are coming for the sacred statue! Tap them before they reach it. Let too many through and it's game over.</p>
+      <button id="start-btn">Start Game</button>
+    </div>
+
+    <!-- Game over screen -->
+    <div class="overlay hidden" id="gameover-screen">
+      <h1>Game Over</h1>
+      <p>The statue was overrun by thieves...</p>
+      <p style="font-size:clamp(16px,2.2vw,22px); color:#ffd76a;">Final Score: <span id="final-score">0</span></p>
+      <button id="restart-btn">Play Again</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  const gameContainer   = document.getElementById('game-container');
+  const thiefLayer      = document.getElementById('thief-layer');
+  const statueWrapper   = document.getElementById('statue-wrapper');
+  const scoreValueEl    = document.getElementById('score-value');
+  const waveValueEl     = document.getElementById('wave-value');
+  const heartsContainer = document.getElementById('hearts-container');
+  const startScreen     = document.getElementById('start-screen');
+  const gameoverScreen  = document.getElementById('gameover-screen');
+  const finalScoreEl    = document.getElementById('final-score');
+  const waveBanner      = document.getElementById('wave-banner');
+  const damageFlash     = document.getElementById('damage-flash');
+  const startBtn        = document.getElementById('start-btn');
+  const restartBtn      = document.getElementById('restart-btn');
+
+  const THIEF_SPRITES = {
+    up:    'assets/thief/run_up.png',
+    down:  'assets/thief/run_down.png',
+    left:  'assets/thief/run_left.png',
+    right: 'assets/thief/run_right.png'
+  };
+
+  const maxLives = 3;
+
+  let score, wave, lives, caughtThisWave, waveTarget;
+  let spawnInterval, travelDuration, maxActive;
+  let spawnTimeoutId, isGameOver, isRunning;
+  let activeThieves;
+
+  /* =========================================================
+     RESPONSIVE FIT — makes the game container exactly fill
+     the available screen space (no scroll) on PC or Android,
+     while keeping the correct aspect ratio for each image.
+  ========================================================= */
+
+  function pickMode(){
+    const vw = window.innerWidth;
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    return (vw >= vh) ? 'pc' : 'android';
+  }
+
+  function fitContainer(){
+    const mode = pickMode();
+    document.body.classList.toggle('mode-pc', mode === 'pc');
+    document.body.classList.toggle('mode-android', mode === 'android');
+
+    const aspect   = mode === 'pc' ? (1920/1080) : (1080/1920);
+    const baseline = mode === 'pc' ? 1920 : 1080; // reference width for UI scaling
+
+    const vw = window.innerWidth;
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
+    let width, height;
+    if (vw / vh > aspect) {
+      // viewport is relatively wider than the image -> height is the limit
+      height = vh;
+      width  = height * aspect;
+    } else {
+      // viewport is relatively taller than the image -> width is the limit
+      width  = vw;
+      height = width / aspect;
+    }
+
+    gameContainer.style.width  = width + 'px';
+    gameContainer.style.height = height + 'px';
+
+    const scale = width / baseline;
+    gameContainer.style.setProperty('--ui-scale', scale);
+  }
+
+  let resizeRaf = null;
+  function scheduleFit(){
+    if(resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(fitContainer);
+  }
+
+  fitContainer();
+  window.addEventListener('resize', scheduleFit);
+  window.addEventListener('orientationchange', scheduleFit);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', scheduleFit);
+  }
+
+  /* ========================================================= */
+
+  function resetGame(){
+    score = 0;
+    wave = 1;
+    lives = maxLives;
+    caughtThisWave = 0;
+    waveTarget = 8;
+    spawnInterval = 1300;
+    travelDuration = 4.2;
+    maxActive = 6;
+    isGameOver = false;
+    isRunning = true;
+    activeThieves = new Set();
+
+    thiefLayer.innerHTML = '';
+    updateHUD();
+
+    gameoverScreen.classList.add('hidden');
+    startScreen.classList.add('hidden');
+
+    clearTimeout(spawnTimeoutId);
+    scheduleSpawn();
+  }
+
+  function updateHUD(){
+    scoreValueEl.textContent = score;
+    waveValueEl.textContent = wave;
+    heartsContainer.innerHTML = '';
+    for(let i=0;i<maxLives;i++){
+      const span = document.createElement('span');
+      span.className = 'heart' + (i < lives ? '' : ' empty');
+      span.textContent = '❤';
+      heartsContainer.appendChild(span);
+    }
+  }
+
+  function scheduleSpawn(){
+    spawnTimeoutId = setTimeout(() => {
+      if(isRunning && !isGameOver){
+        spawnThief();
+      }
+      scheduleSpawn();
+    }, spawnInterval);
+  }
+
+  function getStatueTarget(){
+    const containerRect = thiefLayer.getBoundingClientRect();
+    const statueRect = statueWrapper.getBoundingClientRect();
+    const cx = statueRect.left + statueRect.width/2 - containerRect.left;
+    const cy = statueRect.top + statueRect.height*0.75 - containerRect.top;
+    return { x: cx, y: cy };
+  }
+
+  function getDirectionFromVector(dx, dy){
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    if(angle > -45 && angle <= 45)   return 'right';
+    if(angle > 45 && angle <= 135)   return 'down';
+    if(angle > 135 || angle <= -135) return 'left';
+    return 'up';
+  }
+
+  function spawnThief(){
+    if(activeThieves.size >= maxActive) return;
+
+    const rect = thiefLayer.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+    const pad = 40;
+    let x, y;
+    const edge = Math.floor(Math.random()*4);
+    if(edge === 0){ x = w*0.1 + Math.random()*w*0.8; y = -pad; }
+    else if(edge === 1){ x = w+pad; y = h*0.15 + Math.random()*h*0.7; }
+    else if(edge === 2){ x = w*0.1 + Math.random()*w*0.8; y = h+pad; }
+    else { x = -pad; y = h*0.15 + Math.random()*h*0.7; }
+
+    const target = getStatueTarget();
+    const tx = target.x + (Math.random()*50 - 25);
+    const ty = target.y + (Math.random()*30 - 15);
+
+    const dx = tx - x;
+    const dy = ty - y;
+    const direction = getDirectionFromVector(dx, dy);
+
+    const thief = document.createElement('div');
+    thief.className = 'thief';
+    thief.dataset.direction = direction;
+
+    const shadow = document.createElement('div');
+    shadow.className = 'thief-shadow';
+
+    const img = document.createElement('img');
+    img.className = 'thief-sprite';
+    img.src = THIEF_SPRITES[direction];
+    img.draggable = false;
+    img.alt = 'thief';
+
+    thief.appendChild(shadow);
+    thief.appendChild(img);
+
+    thief.style.left = (x - 32) + 'px';
+    thief.style.top  = (y - 32) + 'px';
+    thiefLayer.appendChild(thief);
+    activeThieves.add(thief);
+
+    const dur = Math.max(1.4, travelDuration + (Math.random()*0.6 - 0.3));
+    thief.style.transition = `left ${dur}s linear, top ${dur}s linear`;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        thief.style.left = (tx - 32) + 'px';
+        thief.style.top  = (ty - 32) + 'px';
+      });
+    });
+
+    function onArrive(e){
+      if(e.propertyName !== 'left') return;
+      thief.removeEventListener('transitionend', onArrive);
+      if(thief.dataset.caught) return;
+      activeThieves.delete(thief);
+      thief.remove();
+      loseLife();
+    }
+    thief.addEventListener('transitionend', onArrive);
+
+    thief.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if(thief.dataset.caught) return;
+      thief.dataset.caught = 'true';
+      activeThieves.delete(thief);
+      catchThief(thief);
+    });
+  }
+
+  function catchThief(thief){
+    const curLeft = thief.style.left;
+    const curTop = thief.style.top;
+    thief.style.transition = 'none';
+    thief.style.left = curLeft;
+    thief.style.top = curTop;
+    void thief.offsetWidth;
+
+    thief.classList.add('caught');
+
+    const px = parseFloat(curLeft) + 32;
+    const py = parseFloat(curTop) + 32;
+    spawnScorePopup(px, py);
+
+    score += 10;
+    caughtThisWave++;
+    updateHUD();
+
+    setTimeout(() => thief.remove(), 300);
+    checkWaveProgress();
+  }
+
+  function spawnScorePopup(x, y){
+    const pop = document.createElement('div');
+    pop.className = 'score-popup';
+    pop.textContent = '+10';
+    pop.style.left = x + 'px';
+    pop.style.top = y + 'px';
+    thiefLayer.appendChild(pop);
+    setTimeout(() => pop.remove(), 700);
+  }
+
+  function checkWaveProgress(){
+    if(caughtThisWave >= waveTarget){
+      nextWave();
+    }
+  }
+
+  function nextWave(){
+    wave++;
+    caughtThisWave = 0;
+    waveTarget = 8 + wave*2;
+    spawnInterval = Math.max(450, spawnInterval - 80);
+    travelDuration = Math.max(1.6, travelDuration - 0.25);
+    maxActive = Math.min(16, maxActive + 1);
+    updateHUD();
+    showWaveBanner();
+  }
+
+  function showWaveBanner(){
+    waveBanner.textContent = 'WAVE ' + wave;
+    waveBanner.classList.remove('show');
+    void waveBanner.offsetWidth;
+    waveBanner.classList.add('show');
+  }
+
+  function loseLife(){
+    lives--;
+    updateHUD();
+    flashDamage();
+    if(lives <= 0){
+      triggerGameOver();
+    }
+  }
+
+  function flashDamage(){
+    damageFlash.classList.remove('flash-active');
+    void damageFlash.offsetWidth;
+    damageFlash.classList.add('flash-active');
+  }
+
+  function triggerGameOver(){
+    isGameOver = true;
+    isRunning = false;
+    clearTimeout(spawnTimeoutId);
+    activeThieves.forEach(t => t.remove());
+    activeThieves.clear();
+    finalScoreEl.textContent = score;
+    gameoverScreen.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', resetGame);
+  restartBtn.addEventListener('click', resetGame);
+
+  score = 0; wave = 1; lives = maxLives;
+  updateHUD();
+});
+</script>
+
+</body>
+</html>
