@@ -86,7 +86,20 @@ document.addEventListener('DOMContentLoaded', () => {
     right: 'assets/thief/run_right.png'
   };
 
-  const THIEF_SIZE = 128; // px, base size before --ui-scale is applied
+  /* =========================================================
+     THIEF SIZE — independent per platform, NOT tied to
+     --ui-scale, so tuning one doesn't affect the other.
+     Just edit these two numbers to resize Kammi's.
+  ========================================================= */
+  const THIEF_SIZE_PC      = 128; // px
+  const THIEF_SIZE_ANDROID = 90;  // px  <-- tweak this to resize on phone
+
+  function getThiefSize(){
+    return document.body.classList.contains('mode-android')
+      ? THIEF_SIZE_ANDROID
+      : THIEF_SIZE_PC;
+  }
+
   const maxLives = 3;
 
   let score, wave, lives, caughtThisWave, waveTarget;
@@ -98,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
      RESPONSIVE FIT — makes the game container exactly fill
      the available screen space (no scroll) on PC or Android,
      while keeping the correct aspect ratio for each image.
+     --ui-scale here only affects HUD text/spacing, NOT thief size.
   ========================================================= */
 
   function pickMode(){
@@ -112,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.toggle('mode-android', mode === 'android');
 
     const aspect   = mode === 'pc' ? (1920/1080) : (1080/1920);
-    const baseline = mode === 'pc' ? 1920 : 480;
+    const baseline = mode === 'pc' ? 1920 : 1080;
 
     const vw = window.innerWidth;
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -229,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dy = ty - y;
     const direction = getDirectionFromVector(dx, dy);
 
-    const half = THIEF_SIZE / 2;
+    const half = getThiefSize() / 2;
 
     const thief = document.createElement('div');
     thief.className = 'thief';
@@ -291,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     thief.classList.add('caught');
 
-    const half = THIEF_SIZE / 2;
+    const half = getThiefSize() / 2;
     const px = parseFloat(curLeft) + half;
     const py = parseFloat(curTop) + half;
     spawnScorePopup(px, py);
