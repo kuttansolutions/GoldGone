@@ -338,8 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
     wave++;
     caughtThisWave = 0;
     waveTarget = 8 + wave*2;
-    spawnInterval = Math.max(450, spawnInterval - 80);
-    travelDuration = Math.max(1.6, travelDuration - 0.25);
+    spawnInterval = Math.max(800, spawnInterval - 80);
+    travelDuration = Math.max(1.3, travelDuration - 0.25);
     maxActive = Math.min(16, maxActive + 1);
     updateHUD();
     showWaveBanner();
