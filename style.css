@@ -20,6 +20,21 @@ html, body{
   overflow: hidden;
 }
 
+#debug-grid-layer{
+  position:absolute;
+  inset:0;
+  z-index:999;
+  pointer-events:none;
+}
+.debug-cell{
+  position:absolute;
+  box-sizing:border-box;
+  border:1px solid rgba(255,255,255,0.15);
+}
+.debug-blocked{ background: rgba(255,0,0,0.35); }
+.debug-spawn{   background: rgba(0,150,255,0.45); }
+.debug-goal{    background: rgba(0,255,80,0.45); }
+.debug-walk{    background: rgba(255,255,255,0.05); }
 /* ---------- Game container ---------- */
 #game-container{
   position: relative;
