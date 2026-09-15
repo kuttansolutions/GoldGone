@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const gameContainer   = document.getElementById('game-container');
   const thiefLayer      = document.getElementById('thief-layer');
+  const statueWrapper   = document.getElementById('statue-wrapper');
   const scoreValueEl    = document.getElementById('score-value');
   const waveValueEl     = document.getElementById('wave-value');
   const heartsContainer = document.getElementById('hearts-container');
@@ -85,8 +86,13 @@ document.addEventListener('DOMContentLoaded', () => {
     right: 'assets/thief/run_right.png'
   };
 
-  const THIEF_SIZE_PC      = 128;
-  const THIEF_SIZE_ANDROID = 90;
+  /* =========================================================
+     THIEF SIZE — independent per platform, NOT tied to
+     --ui-scale, so tuning one doesn't affect the other.
+     Just edit these two numbers to resize Kammi's.
+  ========================================================= */
+  const THIEF_SIZE_PC      = 128; // px
+  const THIEF_SIZE_ANDROID = 90;  // px  <-- tweak this to resize on phone
 
   function getThiefSize(){
     return document.body.classList.contains('mode-android')
@@ -96,140 +102,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const maxLives = 3;
 
-  /* =========================================================
-     MAP DATA
-     0 = blocked (obstacle / wall / can't walk)
-     1 = walkable floor
-     S = spawn cell (thieves may appear here — entrance)
-     G = goal cell (group of cells around the statue — reaching
-         ANY of these = "gold stolen", thief vanishes, lose a life)
-
-     These grids are hand-authored by reading the ground images:
-     - top band = temple door/pillars/steps -> blocked
-     - band just below that = statue's front steps -> goal cluster
-     - middle = open plaza (mandala floor) -> walkable
-     - left/right the whole way down = pillars/planters/bushes -> blocked
-     - bottom stairs = the only entrance -> spawn cluster
-  ========================================================= */
-
-  const GRID_DEFS = {
-    pc: {
-      cols: 16, rows: 9,
-      data: [
-        "0000000000000000",
-        "0000111111110000",
-        "0000111111110000",
-        "000011GGGG110000",
-        "000011GGGG110000",
-        "0011111111111100",
-        "0011111111111100",
-        "0001111111111000",
-        "000SSSSSSSSSS000"
-      ]
-    },
-    android: {
-      cols: 9, rows: 16,
-      data: [
-        "000000000",
-        "000000000",
-        "000000000",
-        "001111100",
-        "001111100",
-        "001GGG100",
-        "001GGG100",
-        "011111110",
-        "011111110",
-        "011111110",
-        "011111110",
-        "011111110",
-        "011111110",
-        "001111100",
-        "001111100",
-        "00SSSSS00"
-      ]
-    }
-  };
-
-  function buildMap(def){
-    const grid = def.data.map(row => row.split(''));
-    const spawnCells = [];
-    const goalCells = [];
-    for(let r=0;r<def.rows;r++){
-      for(let c=0;c<def.cols;c++){
-        const ch = grid[r][c];
-        if(ch === 'S') spawnCells.push({r,c});
-        if(ch === 'G') goalCells.push({r,c});
-      }
-    }
-    return { cols: def.cols, rows: def.rows, grid, spawnCells, goalCells };
-  }
-
-  const MAP_PC      = buildMap(GRID_DEFS.pc);
-  const MAP_ANDROID = buildMap(GRID_DEFS.android);
-
-  function getCurrentMap(){
-    return document.body.classList.contains('mode-android') ? MAP_ANDROID : MAP_PC;
-  }
-
-  function isWalkable(map, r, c){
-    if(r < 0 || c < 0 || r >= map.rows || c >= map.cols) return false;
-    return map.grid[r][c] !== '0';
-  }
-
-  /* Simple 8-directional BFS shortest path across the grid,
-     avoiding blocked cells entirely. */
-  function findPath(map, start, goal){
-    const key = (r,c) => r + ',' + c;
-    const visited = new Set([key(start.r, start.c)]);
-    const prev = new Map();
-    const queue = [start];
-    let qi = 0;
-    const dirs = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
-
-    while(qi < queue.length){
-      const cur = queue[qi++];
-      if(cur.r === goal.r && cur.c === goal.c) break;
-      for(const [dr,dc] of dirs){
-        const nr = cur.r + dr, nc = cur.c + dc;
-        if(!isWalkable(map, nr, nc)) continue;
-        const k = key(nr, nc);
-        if(visited.has(k)) continue;
-        visited.add(k);
-        prev.set(k, cur);
-        queue.push({r:nr, c:nc});
-      }
-    }
-
-    const goalKey = key(goal.r, goal.c);
-    if(!visited.has(goalKey)) return null;
-
-    const path = [];
-    let cur = goal;
-    path.push(cur);
-    while(!(cur.r === start.r && cur.c === start.c)){
-      cur = prev.get(key(cur.r, cur.c));
-      path.push(cur);
-    }
-    path.reverse();
-    return path;
-  }
-
-  function cellCenterFrac(map, cell, jitter = 0.3){
-    const cw = 1 / map.cols, ch = 1 / map.rows;
-    const jx = (Math.random()*2 - 1) * jitter * cw * 0.5;
-    const jy = (Math.random()*2 - 1) * jitter * ch * 0.5;
-    return {
-      x: (cell.c + 0.5) * cw + jx,
-      y: (cell.r + 0.5) * ch + jy
-    };
-  }
-
   let score, wave, lives, caughtThisWave, waveTarget;
   let spawnInterval, travelDuration, maxActive;
   let spawnTimeoutId, isGameOver, isRunning;
   let activeThieves;
 
-  /* ========================================================= */
+  /* =========================================================
+     RESPONSIVE FIT — makes the game container exactly fill
+     the available screen space (no scroll) on PC or Android,
+     while keeping the correct aspect ratio for each image.
+     --ui-scale here only affects HUD text/spacing, NOT thief size.
+  ========================================================= */
 
   function pickMode(){
     const vw = window.innerWidth;
@@ -323,6 +206,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }, spawnInterval);
   }
 
+  function getStatueTarget(){
+    const containerRect = thiefLayer.getBoundingClientRect();
+    const statueRect = statueWrapper.getBoundingClientRect();
+    const cx = statueRect.left + statueRect.width/2 - containerRect.left;
+    const cy = statueRect.top + statueRect.height*0.75 - containerRect.top;
+    return { x: cx, y: cy };
+  }
+
   function getDirectionFromVector(dx, dy){
     const angle = Math.atan2(dy, dx) * 180 / Math.PI;
     if(angle > -45 && angle <= 45)   return 'right';
@@ -334,92 +225,66 @@ document.addEventListener('DOMContentLoaded', () => {
   function spawnThief(){
     if(activeThieves.size >= maxActive) return;
 
-    const map = getCurrentMap();
-    if(map.spawnCells.length === 0 || map.goalCells.length === 0) return;
-
-    const spawnCell = map.spawnCells[Math.floor(Math.random()*map.spawnCells.length)];
-    const goalCell  = map.goalCells[Math.floor(Math.random()*map.goalCells.length)];
-
-    const path = findPath(map, spawnCell, goalCell);
-    if(!path || path.length < 2) return; // no valid route this time, skip
-
     const rect = thiefLayer.getBoundingClientRect();
-    const waypoints = path.map(cell => {
-      const frac = cellCenterFrac(map, cell);
-      return { x: frac.x * rect.width, y: frac.y * rect.height };
-    });
+    const w = rect.width, h = rect.height;
+    const pad = 60;
+    let x, y;
+    const edge = Math.floor(Math.random()*4);
+    if(edge === 0){ x = w*0.1 + Math.random()*w*0.8; y = -pad; }
+    else if(edge === 1){ x = w+pad; y = h*0.15 + Math.random()*h*0.7; }
+    else if(edge === 2){ x = w*0.1 + Math.random()*w*0.8; y = h+pad; }
+    else { x = -pad; y = h*0.15 + Math.random()*h*0.7; }
+
+    const target = getStatueTarget();
+    const tx = target.x + (Math.random()*50 - 25);
+    const ty = target.y + (Math.random()*30 - 15);
+
+    const dx = tx - x;
+    const dy = ty - y;
+    const direction = getDirectionFromVector(dx, dy);
 
     const half = getThiefSize() / 2;
-    const first = waypoints[0];
-    const initialDir = getDirectionFromVector(
-      waypoints[1].x - first.x,
-      waypoints[1].y - first.y
-    );
 
     const thief = document.createElement('div');
     thief.className = 'thief';
-    thief.dataset.direction = initialDir;
-    thief.dataset.waypointIndex = '0';
+    thief.dataset.direction = direction;
 
     const shadow = document.createElement('div');
     shadow.className = 'thief-shadow';
 
     const img = document.createElement('img');
     img.className = 'thief-sprite';
-    img.src = THIEF_SPRITES[initialDir];
+    img.src = THIEF_SPRITES[direction];
     img.draggable = false;
     img.alt = 'kammi';
 
     thief.appendChild(shadow);
     thief.appendChild(img);
 
-    thief.style.left = (first.x - half) + 'px';
-    thief.style.top  = (first.y - half) + 'px';
+    thief.style.left = (x - half) + 'px';
+    thief.style.top  = (y - half) + 'px';
     thiefLayer.appendChild(thief);
     activeThieves.add(thief);
 
-    const cellPixelSize = Math.min(rect.width / map.cols, rect.height / map.rows);
-    const perCellDuration = Math.max(1.4, travelDuration) / Math.max(1, path.length - 1);
+    const dur = Math.max(1.4, travelDuration + (Math.random()*0.6 - 0.3));
+    thief.style.transition = `left ${dur}s linear, top ${dur}s linear`;
 
-    function moveToNext(){
-      if(thief.dataset.caught) return;
-      const idx = parseInt(thief.dataset.waypointIndex, 10);
-      const nextIdx = idx + 1;
-
-      if(nextIdx >= waypoints.length){
-        activeThieves.delete(thief);
-        thief.remove();
-        loseLife();
-        return;
-      }
-
-      const from = waypoints[idx];
-      const to = waypoints[nextIdx];
-      const dir = getDirectionFromVector(to.x - from.x, to.y - from.y);
-      if(dir !== thief.dataset.direction){
-        thief.dataset.direction = dir;
-        img.src = THIEF_SPRITES[dir];
-      }
-
-      const dist = Math.hypot(to.x - from.x, to.y - from.y);
-      const dur = Math.max(0.12, (dist / Math.max(1,cellPixelSize)) * perCellDuration);
-
-      thief.style.transition = `left ${dur}s linear, top ${dur}s linear`;
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          thief.style.left = (to.x - half) + 'px';
-          thief.style.top  = (to.y - half) + 'px';
-        });
+        thief.style.left = (tx - half) + 'px';
+        thief.style.top  = (ty - half) + 'px';
       });
-      thief.dataset.waypointIndex = String(nextIdx);
-    }
+    });
 
-    function onSegmentEnd(e){
+    function onArrive(e){
       if(e.propertyName !== 'left') return;
+      thief.removeEventListener('transitionend', onArrive);
       if(thief.dataset.caught) return;
-      moveToNext();
+      activeThieves.delete(thief);
+      thief.remove();
+      loseLife();
     }
-    thief.addEventListener('transitionend', onSegmentEnd);
+    thief.addEventListener('transitionend', onArrive);
 
     thief.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -428,8 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
       activeThieves.delete(thief);
       catchThief(thief);
     });
-
-    moveToNext();
   }
 
   function catchThief(thief){
@@ -493,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try{
       hitSound.currentTime = 0;
       hitSound.play().catch(() => {});
-    }catch(err){}
+    }catch(err){ /* ignore playback errors (autoplay restrictions etc.) */ }
   }
 
   function loseLife(){
@@ -523,6 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   startBtn.addEventListener('click', () => {
+    // Unlock audio playback on the very first user gesture (needed for mobile browsers)
     hitSound.play().then(() => {
       hitSound.pause();
       hitSound.currentTime = 0;
@@ -531,46 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   restartBtn.addEventListener('click', resetGame);
-
-  /* =========================================================
-     DEBUG GRID OVERLAY — press "G" any time to toggle.
-     Draws the current platform's map on top of the real
-     background so you can visually check it against the art
-     and tune the ASCII grids above.
-     Red = blocked, Blue = spawn, Green = goal, faint = walkable.
-  ========================================================= */
-  let debugLayer = null;
-  function toggleDebugGrid(){
-    if(debugLayer){
-      debugLayer.remove();
-      debugLayer = null;
-      return;
-    }
-    const map = getCurrentMap();
-    const rect = thiefLayer.getBoundingClientRect();
-    const cw = rect.width / map.cols, ch = rect.height / map.rows;
-
-    debugLayer = document.createElement('div');
-    debugLayer.id = 'debug-grid-layer';
-
-    for(let r=0;r<map.rows;r++){
-      for(let c=0;c<map.cols;c++){
-        const type = map.grid[r][c];
-        const cell = document.createElement('div');
-        cell.className = 'debug-cell debug-' +
-          (type === '0' ? 'blocked' : type === 'S' ? 'spawn' : type === 'G' ? 'goal' : 'walk');
-        cell.style.left = (c*cw) + 'px';
-        cell.style.top = (r*ch) + 'px';
-        cell.style.width = cw + 'px';
-        cell.style.height = ch + 'px';
-        debugLayer.appendChild(cell);
-      }
-    }
-    gameContainer.appendChild(debugLayer);
-  }
-  window.addEventListener('keydown', (e) => {
-    if(e.key === 'g' || e.key === 'G') toggleDebugGrid();
-  });
 
   score = 0; wave = 1; lives = maxLives;
   updateHUD();
